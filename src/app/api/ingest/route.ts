@@ -13,11 +13,13 @@ export async function POST(req: Request) {
     }
 
     // 1. Call Apify to scrape the URL
-    // For this example we assume we have an Apify actor that takes a URL and returns text
     const apifyResponse = await fetch(`https://api.apify.com/v2/acts/${process.env.APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${process.env.APIFY_API_TOKEN}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ startUrls: [{ url }] })
+      body: JSON.stringify({ 
+        startUrls: [{ url }],
+        pageFunction: 'async function({ $, request }) { return { title: $(\'title\').text(), text: $(\'body\').text().replace(/\\s+/g, \' \') }; }'
+      })
     });
     
     if (!apifyResponse.ok) {
@@ -25,9 +27,20 @@ export async function POST(req: Request) {
       // For demo purposes, if Apify fails or is not configured, we mock the content
     }
     const apifyData = await apifyResponse.json().catch(() => null);
-    const content = apifyData?.[0]?.text || `Mocked content for ${url} since Apify might not be configured.`;
-    const title = apifyData?.[0]?.title || `Article from ${new URL(url).hostname}`;
+    
+    let content = '';
+    let title = `Article from ${new URL(url).hostname}`;
 
+    if (apifyData && apifyData.length > 0) {
+      if (apifyData[0]['#error']) {
+        content = `The article at ${url} could not be scraped because the website blocked the scraper or an error occurred.`;
+      } else {
+        content = apifyData[0].text || `No text could be extracted from ${url}.`;
+        if (apifyData[0].title) title = apifyData[0].title;
+      }
+    } else {
+      content = `No data was returned from the scraper for ${url}.`;
+    }
     // 2. Generate Summary & Embeddings
     const summary = await generateSummary(content);
     const embedding = await generateEmbedding(summary);
@@ -44,17 +57,19 @@ export async function POST(req: Request) {
 
     // 4. Save to Pinecone
     const index = getIndex();
-    await index.upsert([
-      {
-        id: articleId as string,
-        values: embedding,
-        metadata: { 
-          title: title as string, 
-          url: url as string, 
-          summary 
+    await index.upsert({
+      records: [
+        {
+          id: articleId as string,
+          values: embedding,
+          metadata: { 
+            title: title as string, 
+            url: url as string, 
+            summary 
+          }
         }
-      }
-    ] as any);
+      ]
+    });
 
     // 5. Sync to Notion
     if (process.env.NOTION_DATABASE_ID && process.env.NOTION_API_KEY) {

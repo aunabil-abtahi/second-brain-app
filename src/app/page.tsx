@@ -43,7 +43,7 @@ export default function Home() {
         body: JSON.stringify({ url: newUrl }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setNewUrl("");
         // Optimistically add to top
         setArticles(prev => [{
@@ -53,9 +53,12 @@ export default function Home() {
           summary: data.summary,
           is_starred: false
         }, ...prev]);
+      } else {
+        alert(`Error: ${data.error || 'Failed to curate article'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`An error occurred: ${err.message}`);
     } finally {
       setIsIngesting(false);
     }
