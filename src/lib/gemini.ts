@@ -4,21 +4,19 @@ export const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || 'placeholder',
 });
 
-export async function generateSummary(text: string) {
+export async function generateSummary(text: string): Promise<string> {
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `Summarize the following article/content in a concise and insightful way:\n\n${text}`,
+    model: 'gemini-3.6-flash',
+    contents: `Summarize the following article in a concise paragraph. Focus on the main takeaways.\n\n${text}`,
   });
-  return response.text || '';
+  return response.text || 'No summary generated.';
 }
 
-export async function generateEmbedding(text: string) {
+export async function generateEmbedding(text: string): Promise<number[]> {
   const response = await ai.models.embedContent({
-    model: 'text-embedding-004',
+    model: 'gemini-embedding-2',
     contents: text,
+    config: { outputDimensionality: 768 }
   });
-  if (!response.embeddings || !response.embeddings[0] || !response.embeddings[0].values) {
-    throw new Error('Failed to generate embedding');
-  }
-  return response.embeddings[0].values;
+  return response.embeddings?.[0]?.values || [];
 }
